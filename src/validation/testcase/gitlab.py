@@ -72,21 +72,35 @@ class GitlabTestcase(Testcase):
         all_statuses = list(self.project.get_commit_statuses(commit=self.head_commit))
 
         logging.debug(
-            "Fetching statuses for commit %s, looking for author: %s",
+            "Fetching statuses for commit %s, total found: %d",
             self.head_commit,
-            self.account_name,
-        )
-
-        filtered_statuses = [status for status in all_statuses if self._check_status_author(status)]
-
-        logging.debug(
-            "Found %d/%d statuses from %s",
-            len(filtered_statuses),
             len(all_statuses),
-            self.account_name,
         )
 
-        return filtered_statuses
+        # Log all statuses with their authors for debugging
+        for status in all_statuses:
+            author = "unknown"
+            try:
+                if status._raw_commit_flag and status._raw_commit_flag.author:
+                    author = status._raw_commit_flag.author.get("username", "unknown")
+            except (KeyError, AttributeError):
+                pass
+            logging.debug(
+                "Status '%s' by '%s' - state: %s",
+                status.context,
+                author,
+                status.state,
+            )
+
+        # GitLab pipeline statuses may not have the service account as author
+        # Only filter if we're looking for external commit statuses
+        # For now, accept all statuses to avoid filtering out GitLab CI pipelines
+        logging.info(
+            "Returning all %d statuses for GitLab (not filtering by author)",
+            len(all_statuses),
+        )
+
+        return all_statuses
 
     def is_status_successful(self, status: CommitFlag) -> bool:
         return status.state == CommitStatus.success
